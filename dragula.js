@@ -263,10 +263,14 @@ function dragula(initialContainers, options) {
     var item = _copy || _item;
     var clientX = getCoord('clientX', e);
     var clientY = getCoord('clientY', e);
+
+    var x = clientX - _offsetX;
+    var y = clientY - _offsetY;
+
     var elementBehindCursor = getElementBehindPoint(_mirror, clientX, clientY);
     var dropTarget = findDropTarget(elementBehindCursor, clientX, clientY);
     if (dropTarget && ((_copy && o.copySortSource) || (!_copy || dropTarget !== _source))) {
-      drop(item, dropTarget);
+      drop(item, dropTarget, x, y, clientX, clientY);
     } else if (o.removeOnSpill) {
       remove();
     } else {
@@ -274,15 +278,18 @@ function dragula(initialContainers, options) {
     }
   }
 
-  function drop(item, target) {
+  function drop(item, target, x, y, clientX, clientY) {
     var parent = getParent(item);
     if (_copy && o.copySortSource && target === _source) {
       parent.removeChild(_item);
     }
     if (isInitialPlacement(target)) {
       drake.emit('cancel', item, _source, _source);
+      drake.emit('placed', item, _source, _source, x, y, clientX, clientY);
+
     } else {
       drake.emit('drop', item, target, _source, _currentSibling);
+      drake.emit('placed', item, target, _source, _currentSibling, x, y, clientX, clientY);
     }
     cleanup();
   }
@@ -378,8 +385,6 @@ function dragula(initialContainers, options) {
     }
   }
 
-  var throttle;
-
   function drag(e) {
     if (!_mirror) {
       return;
@@ -394,16 +399,8 @@ function dragula(initialContainers, options) {
     _mirror.style.left = x + 'px';
     _mirror.style.top = y + 'px';
 
-    if (throttle) {
-      return never();
-    }
-
-    throttle = true;
-    setTimeout(function () {
-      throttle = false;
-    }, 250);
-
     var item = _copy || _item;
+
     var elementBehindCursor = getElementBehindPoint(_mirror, clientX, clientY);
     var dropTarget = findDropTarget(elementBehindCursor, clientX, clientY);
     var changed = dropTarget !== null && dropTarget !== _lastDropTarget;
@@ -441,6 +438,8 @@ function dragula(initialContainers, options) {
       dropTarget.insertBefore(item, reference);
       drake.emit('shadow', item, dropTarget, _source);
     }
+
+    drake.emit('move', item, _lastDropTarget, _source, x, y, clientX, clientY);
 
     function moved(type) {
       drake.emit(type, item, _lastDropTarget, _source);
@@ -620,6 +619,7 @@ function getScroll(scrollProp, offsetProp) {
   }
   return doc.body[scrollProp];
 }
+
 
 function getElementBehindPoint(point, x, y) {
   var p = point || {};

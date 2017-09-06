@@ -285,7 +285,7 @@ function dragula(initialContainers, options) {
     }
     if (isInitialPlacement(target)) {
       drake.emit('cancel', item, _source, _source);
-      drake.emit('placed', item, _source, _source, x, y, clientX, clientY);
+      drake.emit('placed', item, _source, _source, null, x, y, clientX, clientY);
 
     } else {
       drake.emit('drop', item, target, _source, _currentSibling);

@@ -27,6 +27,9 @@ function dragula(initialContainers, options) {
   var _grabbed; // holds mousedown context until first mousemove
 
   var o = options || {};
+
+  o.grid = o.grid || 1;
+
   if (o.moves === void 0) {
     o.moves = always;
   }
@@ -152,8 +155,8 @@ function dragula(initialContainers, options) {
       return;
     }
     if (o.ignoreInputTextSelection) {
-      var clientX = getCoord('clientX', e);
-      var clientY = getCoord('clientY', e);
+      var clientX = getCoord('clientX', e, o.grid);
+      var clientY = getCoord('clientY', e, o.grid);
       var elementBehindCursor = doc.elementFromPoint(clientX, clientY);
       if (isInput(elementBehindCursor)) {
         return;
@@ -167,8 +170,8 @@ function dragula(initialContainers, options) {
     start(grabbed);
 
     var offset = getOffset(_item);
-    _offsetX = getCoord('pageX', e) - offset.left;
-    _offsetY = getCoord('pageY', e) - offset.top;
+    _offsetX = getCoord('pageX', e, o.grid) - offset.left;
+    _offsetY = getCoord('pageY', e, o.grid) - offset.top;
 
     classes.add(_copy || _item, 'gu-transit');
     renderMirrorImage();
@@ -261,8 +264,8 @@ function dragula(initialContainers, options) {
       return;
     }
     var item = _copy || _item;
-    var clientX = getCoord('clientX', e);
-    var clientY = getCoord('clientY', e);
+    var clientX = getCoord('clientX', e, o.grid);
+    var clientY = getCoord('clientY', e, o.grid);
 
     var x = clientX - _offsetX;
     var y = clientY - _offsetY;
@@ -391,13 +394,14 @@ function dragula(initialContainers, options) {
     }
     e.preventDefault();
 
-    var clientX = getCoord('clientX', e);
-    var clientY = getCoord('clientY', e);
+    var clientX = getCoord('clientX', e, o.grid);
+    var clientY = getCoord('clientY', e, o.grid);
     var x = clientX - _offsetX;
     var y = clientY - _offsetY;
 
     _mirror.style.left = x + 'px';
     _mirror.style.top = y + 'px';
+
 
     var item = _copy || _item;
 
@@ -693,7 +697,8 @@ function getEventHost(e) {
   return e;
 }
 
-function getCoord(coord, e) {
+function getCoord(coord, e, grid) {
+  grid = grid || 1;
   var host = getEventHost(e);
   var missMap = {
     pageX: 'clientX', // IE8
@@ -702,7 +707,7 @@ function getCoord(coord, e) {
   if (coord in missMap && !(coord in host) && missMap[coord] in host) {
     coord = missMap[coord];
   }
-  return host[coord];
+  return Math.round(host[coord] / grid) * grid;
 }
 
 module.exports = dragula;

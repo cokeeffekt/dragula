@@ -6,6 +6,18 @@ var classes = require('./classes');
 var doc = document;
 var documentElement = doc.documentElement;
 
+var shiftDown = false;
+document.addEventListener('keydown', function (e) {
+  if (e.which === 16) {
+    shiftDown = true;
+  }
+});
+document.addEventListener('keyup', function (e) {
+  if (e.which === 16) {
+    shiftDown = false;
+  }
+});
+
 function dragula(initialContainers, options) {
   var len = arguments.length;
   if (len === 1 && Array.isArray(initialContainers) === false) {
@@ -15,6 +27,7 @@ function dragula(initialContainers, options) {
   var _mirror; // mirror image
   var _source; // source container
   var _item; // item being dragged
+  var _extras; // extra elements to drag
   var _offsetX; // reference x
   var _offsetY; // reference y
   var _moveX; // reference move x
@@ -174,6 +187,15 @@ function dragula(initialContainers, options) {
     _offsetY = getCoord('pageY', e, o.grid) - offset.top;
 
     classes.add(_copy || _item, 'gu-transit');
+
+    if (_extras) {
+      _extras.forEach(function (item) {
+        classes.add(item.el, 'gu-transit');
+        var offset = getOffset(item.el);
+        item.offsetX = getCoord('pageX', e, o.grid) - offset.left;
+        item.offsetY = getCoord('pageY', e, o.grid) - offset.top;
+      });
+    }
     renderMirrorImage();
     drag(e);
   }
@@ -226,6 +248,22 @@ function dragula(initialContainers, options) {
   }
 
   function start(context) {
+    // if shift is down bring touching items with it
+    if (shiftDown && context.source.dataset.multidrag == 'true') {
+      var moveItemDims = context.item.getBoundingClientRect();
+      context.source
+        .querySelectorAll('.card')
+        .forEach(function (i) {
+          var ol = intersectRect(moveItemDims, i.getBoundingClientRect());
+          if (ol && canStart(i) && i !== context.item) {
+            _extras = _extras || [];
+            _extras.push({
+              el: i
+            });
+          }
+        });
+    }
+
     if (isCopy(context.item, context.source)) {
       _copy = context.item.cloneNode(true);
       drake.emit('cloned', _copy, context.item, 'copy');
@@ -270,10 +308,28 @@ function dragula(initialContainers, options) {
     var x = clientX - _offsetX;
     var y = clientY - _offsetY;
 
-    var elementBehindCursor = getElementBehindPoint(_mirror, clientX, clientY);
+    var allItems = [{
+      el: item,
+      x: x,
+      y: y
+    }];
+
+    var mirrorList = [_mirror];
+    if (_extras) {
+      mirrorList = mirrorList.concat(_extras.map(i => i.mirror));
+      _extras.forEach(item => {
+        allItems.push({
+          el: item.el,
+          x: clientX - item.offsetX,
+          y: clientY - item.offsetY
+        });
+      });
+    }
+
+    var elementBehindCursor = getElementBehindPoint(mirrorList, clientX, clientY);
     var dropTarget = findDropTarget(elementBehindCursor, clientX, clientY);
     if (dropTarget && ((_copy && o.copySortSource) || (!_copy || dropTarget !== _source))) {
-      drop(item, dropTarget, x, y, clientX, clientY);
+      drop(item, dropTarget, x, y, clientX, clientY, allItems);
     } else if (o.removeOnSpill) {
       remove();
     } else {
@@ -281,18 +337,19 @@ function dragula(initialContainers, options) {
     }
   }
 
-  function drop(item, target, x, y, clientX, clientY) {
+  function drop(item, target, x, y, clientX, clientY, allItems) {
     var parent = getParent(item);
     if (_copy && o.copySortSource && target === _source) {
       parent.removeChild(_item);
     }
+    console.log(allItems);
     if (isInitialPlacement(target)) {
-      drake.emit('cancel', item, _source, _source);
-      drake.emit('placed', item, _source, _source, null, x, y, clientX, clientY);
+      drake.emit('cancel', item, _source, _source, allItems);
+      drake.emit('placed', item, _source, _source, null, x, y, clientX, clientY, allItems);
 
     } else {
       drake.emit('drop', item, target, _source, _currentSibling);
-      drake.emit('placed', item, target, _source, _currentSibling, x, y, clientX, clientY);
+      drake.emit('placed', item, target, _source, _currentSibling, x, y, clientX, clientY, allItems);
     }
     cleanup();
   }
@@ -311,6 +368,7 @@ function dragula(initialContainers, options) {
   }
 
   function cancel(revert) {
+    console.log('cancel revert:' + revert);
     if (!drake.dragging) {
       return;
     }
@@ -324,7 +382,17 @@ function dragula(initialContainers, options) {
           parent.removeChild(_copy);
         }
       } else {
-        _source.insertBefore(item, _initialSibling);
+        console.log(_source);
+        if (Array.from(_source.children).includes(_initialSibling) || !_initialSibling)
+          _source.insertBefore(item, _initialSibling);
+        else
+          _source.insertBefore(item, null);
+
+        if (_extras)
+          if (Array.from(_source.children).includes(_initialSibling) || !_initialSibling)
+            _extras.forEach(item => _source.insertBefore(item.el, _initialSibling));
+          else
+            _extras.forEach(item => _source.insertBefore(item.el, null));
       }
     }
     if (initial || reverts) {
@@ -336,12 +404,19 @@ function dragula(initialContainers, options) {
   }
 
   function cleanup() {
+    console.log('DRAG:CLEANUP');
     var item = _copy || _item;
     ungrab();
     removeMirrorImage();
     if (item) {
       classes.rm(item, 'gu-transit');
     }
+
+    if (_extras)
+      _extras.forEach(i => {
+        classes.rm(i.el, 'gu-transit');
+      });
+
     if (_renderTimer) {
       clearTimeout(_renderTimer);
     }
@@ -350,7 +425,7 @@ function dragula(initialContainers, options) {
       drake.emit('out', item, _lastDropTarget, _source);
     }
     drake.emit('dragend', item);
-    _source = _item = _copy = _initialSibling = _currentSibling = _renderTimer = _lastDropTarget = null;
+    _source = _item = _copy = _initialSibling = _currentSibling = _renderTimer = _lastDropTarget = _extras = null;
   }
 
   function isInitialPlacement(target, s) {
@@ -402,10 +477,21 @@ function dragula(initialContainers, options) {
     _mirror.style.left = x + 'px';
     _mirror.style.top = y + 'px';
 
+    if (_extras)
+      _extras.forEach(item => {
+        var x = clientX - item.offsetX;
+        var y = clientY - item.offsetY;
+        item.mirror.style.left = x + 'px';
+        item.mirror.style.top = y + 'px';
+      });
 
     var item = _copy || _item;
 
-    var elementBehindCursor = getElementBehindPoint(_mirror, clientX, clientY);
+    var mirrorList = [_mirror];
+    if (_extras)
+      mirrorList = mirrorList.concat(_extras.map(i => i.mirror));
+
+    var elementBehindCursor = getElementBehindPoint(mirrorList, clientX, clientY);
     var dropTarget = findDropTarget(elementBehindCursor, clientX, clientY);
     var changed = dropTarget !== null && dropTarget !== _lastDropTarget;
     if (changed || dropTarget === null) {
@@ -439,7 +525,18 @@ function dragula(initialContainers, options) {
       reference !== nextEl(item)
     ) {
       _currentSibling = reference;
-      dropTarget.insertBefore(item, reference);
+
+      if (Array.from(dropTarget.children).includes(reference) || !reference)
+        dropTarget.insertBefore(item, reference);
+      else
+        dropTarget.insertBefore(item, reference);
+
+      if (_extras)
+        if (dropTarget.contains(reference) || !reference)
+          _extras.forEach(item => dropTarget.insertBefore(item.el, reference));
+        else
+          _extras.forEach(item => dropTarget.insertBefore(item.el, null));
+
       drake.emit('shadow', item, dropTarget, _source);
     }
 
@@ -486,6 +583,18 @@ function dragula(initialContainers, options) {
     touchy(documentElement, 'add', 'mousemove', drag);
     classes.add(o.mirrorContainer, 'gu-unselectable');
     drake.emit('cloned', _mirror, _item, 'mirror');
+
+    if (_extras) {
+      _extras.forEach(function (item) {
+        var tR = item.el.getBoundingClientRect();
+        var tM = item.el.cloneNode(true);
+        tM.style.width = getRectWidth(tR) + 'px';
+        tM.style.height = getRectHeight(tR) + 'px';
+        classes.add(tM, 'gu-mirror');
+        o.mirrorContainer.appendChild(tM);
+        item.mirror = tM;
+      });
+    }
   }
 
   function removeMirrorImage() {
@@ -494,6 +603,13 @@ function dragula(initialContainers, options) {
       touchy(documentElement, 'remove', 'mousemove', drag);
       getParent(_mirror).removeChild(_mirror);
       _mirror = null;
+
+      if (_extras) {
+        _extras.forEach(function (item) {
+          getParent(item.mirror).removeChild(item.mirror);
+        });
+      }
+
     }
   }
 
@@ -626,12 +742,20 @@ function getScroll(scrollProp, offsetProp) {
 
 
 function getElementBehindPoint(point, x, y) {
-  var p = point || {};
-  var state = p.className;
+  var p;
   var el;
-  p.className += ' gu-hide';
+  for (var i = 0, len = point.length; i < len; i++) {
+    p = point[i] || {};
+    p.oldClassName = p.className;
+    p.className += ' gu-hide';
+  }
   el = doc.elementFromPoint(x, y);
-  p.className = state;
+
+  for (i = 0, len = point.length; i < len; i++) {
+    p = point[i];
+    p.className = p.oldClassName;
+  }
+
   return el;
 }
 
@@ -708,6 +832,13 @@ function getCoord(coord, e, grid) {
     coord = missMap[coord];
   }
   return Math.round(host[coord] / grid) * grid;
+}
+
+function intersectRect(r1, r2) {
+  return !(r2.left > r1.right ||
+    r2.right < r1.left ||
+    r2.top > r1.bottom ||
+    r2.bottom < r1.top);
 }
 
 module.exports = dragula;

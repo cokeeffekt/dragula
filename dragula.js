@@ -345,11 +345,11 @@ function dragula(initialContainers, options) {
     console.log(allItems);
     if (isInitialPlacement(target)) {
       drake.emit('cancel', item, _source, _source, allItems);
-      drake.emit('placed', item, _source, _source, null, x, y, clientX, clientY, allItems);
+      drake.emit('placed', item, _source, _source, null, x, y, clientX, clientY, allItems, shiftDown);
 
     } else {
       drake.emit('drop', item, target, _source, _currentSibling);
-      drake.emit('placed', item, target, _source, _currentSibling, x, y, clientX, clientY, allItems);
+      drake.emit('placed', item, target, _source, _currentSibling, x, y, clientX, clientY, allItems, shiftDown);
     }
     cleanup();
   }

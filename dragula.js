@@ -18,6 +18,10 @@ document.addEventListener('keyup', function (e) {
   }
 });
 
+document.addEventListener('mouseenter', function (e) {
+    shiftDown = e.shiftKey;
+});
+
 function dragula(initialContainers, options) {
   var len = arguments.length;
   if (len === 1 && Array.isArray(initialContainers) === false) {
